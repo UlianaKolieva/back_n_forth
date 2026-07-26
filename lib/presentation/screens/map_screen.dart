@@ -8,6 +8,9 @@ import '../../core/network/network_resilience.dart';
 import '../../core/network/logging_tile_provider.dart';
 import '../../core/utils/logger.dart';
 import '../../domain/entities/stop.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_svg/flutter_svg.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -21,6 +24,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<Stop> _allStops = [];
   List<Stop> _filteredStops = [];
   bool _isSearching = false;
+  LatLng? _startPoint;
+  LatLng? _endPoint;
+  List<LatLng>? _routeCoordinates;
+  bool _isRouteLoading = false;
   
   late MapController _mapController;
   
@@ -156,6 +163,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  Future<void> _buildRoute(LatLng start, LatLng end) async {
+    setState(() => _isRouteLoading = true);
+
+    try {
+      // Формат OSRM: долгота,широта (lon,lat)
+      final url = Uri.parse(
+          'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson');
+
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final coords = data['routes'][0]['geometry']['coordinates'] as List;
+
+        // Преобразуем [lon, lat] обратно в [lat, lon] для FlutterMap
+        _routeCoordinates = coords.map((c) => LatLng(c[1], c[0])).toList();
+      } else {
+        print('Ошибка построения маршрута: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Ошибка сети при построении маршрута: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isRouteLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final stopsAsync = ref.watch(stopsProvider);
@@ -174,6 +209,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             options: MapOptions(
               initialCenter: const LatLng(54.9885, 73.3242),
               initialZoom: 12,
+              // Добавляем onTap для выбора точек
+              onTap: (tapPosition, point) {
+                if (_startPoint == null) {
+                  setState(() => _startPoint = point);
+                } else if (_endPoint == null) {
+                  setState(() => _endPoint = point);
+                  // Если обе точки есть — строим маршрут
+                  _buildRoute(_startPoint!, _endPoint!);
+                } else {
+                  // Если маршрут уже есть, сбрасываем и начинаем заново
+                  setState(() {
+                    _startPoint = point;
+                    _endPoint = null;
+                    _routeCoordinates = null;
+                  });
+                }
+              },
               onMapReady: () {
                 setState(() => _mapReady = true);
               },
@@ -207,6 +259,44 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Ошибка: $e')),
+              ),
+              //линия маршрута
+              if (_routeCoordinates != null && _routeCoordinates!.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _routeCoordinates!,
+                    color: Colors.blueAccent,
+                    strokeWidth: 5.0,
+                  ),
+                ],
+              ),
+              // Маркеры точек старта и финиша
+              MarkerLayer(
+                markers: [
+                  if (_startPoint != null)
+                    Marker(
+                      point: _startPoint!,
+                      width: 40,
+                      height: 40,
+                      child: SvgPicture.asset(
+                        'assets/images/marker_start.svg',
+                        width: 40,
+                        height: 40,
+                      ),
+                    ),
+                  if (_endPoint != null)
+                    Marker(
+                      point: _endPoint!,
+                      width: 40,
+                      height: 40,
+                      child: SvgPicture.asset(
+                        'assets/images/marker_end.svg',
+                        width: 40,
+                        height: 40,
+                      ),
+                    ),
+                ],
               ),
               if (myLoc != null)
                 MarkerLayer(
