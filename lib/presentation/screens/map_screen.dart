@@ -318,97 +318,157 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             top: 16,
             left: 16,
             right: 16,
-            child: Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: _searchController,
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: (value) => _searchStops(value),
-                      decoration: InputDecoration(
-                        hintText: 'Например: Центр, Рынок, Ленина...',
-                        hintStyle: TextStyle(color: Theme.of(context).hintColor),
-                        prefixIcon: Icon(Icons.search, color: Theme.of(context).iconTheme.color),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(Icons.clear, color: Theme.of(context).iconTheme.color),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _filteredStops = []);
-                                },
-                              )
-                            : null,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      ),
-                      onChanged: (value) => _searchStops(value),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[800] : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Поле ввода
+                  TextField(
+                    controller: _searchController,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.grey[800],
+                      fontSize: 16,
                     ),
-                    if (_isSearching)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (value) => _searchStops(value),
+                    decoration: InputDecoration(
+                      hintText: 'Например: Центр, Рынок, Ленина...',
+                      hintStyle: TextStyle(
+                        color: isDark ? Colors.grey[500] : Colors.grey[400],
                       ),
-                    if (_filteredStops.isNotEmpty)
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 250),
-                        margin: const EdgeInsets.only(top: 8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: _filteredStops.length > 7 ? 7 : _filteredStops.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1, thickness: 0.5),
-                          itemBuilder: (context, index) {
-                            final stop = _filteredStops[index];
-                            return ListTile(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              leading: CircleAvatar(
-                                radius: 10,
-                                backgroundColor: Colors.blue,
-                                child: Text(
-                                  '${index + 1}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                                ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(
+                                Icons.clear,
+                                color: isDark ? Colors.grey[500] : Colors.grey[600],
                               ),
-                              title: Text(
-                                stop.name,
-                                style: const TextStyle(fontWeight: FontWeight.w500),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                '${stop.lat.toStringAsFixed(4)}, ${stop.lon.toStringAsFixed(4)}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                              ),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                              onTap: () {
-                                _mapController.move(
-                                  LatLng(stop.lat, stop.lon),
-                                  17, // Ближе зум при выборе
-                                );
+                              onPressed: () {
                                 _searchController.clear();
-                                FocusScope.of(context).unfocus(); // Скрыть клавиатуру
                                 setState(() => _filteredStops = []);
                               },
-                            );
-                          },
-                        ),
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
                       ),
-                  ],
-                ),
+                      filled: false,
+                    ),
+                    onChanged: (value) => _searchStops(value),
+                  ),
+                  
+                  // Индикатор загрузки
+                  if (_isSearching)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
+
+          // Результаты поиска (отдельно от инпута)
+          if (_filteredStops.isNotEmpty)
+            Positioned(
+              top: 80,
+              left: 16,
+              right: 16,
+              child: Container(
+                constraints: const BoxConstraints(maxHeight: 300),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[800] : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: _filteredStops.length > 5 ? 5 : _filteredStops.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    color: isDark ? Colors.grey[800] : Colors.grey[200],
+                  ),
+                  itemBuilder: (context, index) {
+                    final stop = _filteredStops[index];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: Colors.blue,
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        stop.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white : Colors.grey[900],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${stop.lat.toStringAsFixed(4)}, ${stop.lon.toStringAsFixed(4)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.grey[500] : Colors.grey[600],
+                        ),
+                      ),
+                      trailing: Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: isDark ? Colors.grey[600] : Colors.grey[400],
+                      ),
+                      onTap: () {
+                        _mapController.move(
+                          LatLng(stop.lat, stop.lon),
+                          17,
+                        );
+                        _searchController.clear();
+                        FocusScope.of(context).unfocus();
+                        setState(() => _filteredStops = []);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
           if (_isOffline)
           Container(
             color: Colors.grey[850],
