@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'presentation/screens/map_screen.dart';
 import 'data/datasources/local_db_datasource.dart';
 import 'data/datasources/overpass_datasource.dart';
-import 'domain/entities/stop.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

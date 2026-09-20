@@ -1,17 +1,23 @@
 # back_n_forth
 
-A new Flutter project.
+Мобильное приложение для навигации по городу и построению маршрутов.
 
-## Getting Started
+Приложение не содержит трекеров, рекламы и не собирает персональные данные. Вся информация (остановки, маршруты) хранится локально на вашем устройстве и никуда не передается.
 
-This project is a starting point for a Flutter application.
+Возможности:
+- Поддержка светлой и темной темы
+- Отображение/скрытие автобусных остановок на карте
+- Поиск по остановкам
+- Построение маршрута между двумя точками
 
-A few resources to get you started if this is your first Flutter project:
+Тайлы карт - OpenStreetMap
+Сервис построения маршрутов - OSRM
+Источник данных об остановках - Overpass API
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Запуск проекта
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. Убедитесь, что у вас установлен flutter и склонируйте репозиторий
+2. Установите зависимости
+`flutter pub get`
+3. Запустите приложение
+`flutter run`

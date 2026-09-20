@@ -28,7 +28,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   LatLng? _endPoint;
   List<LatLng>? _routeCoordinates;
   bool _isRouteLoading = false;
-  
+  bool _showStops = true;
+
   late MapController _mapController;
   
   bool _mapReady = false;
@@ -50,15 +51,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     super.dispose();
   }
 
-  ColorFilter _getHighContrastFilter() {
-    const double contrast = 3.5;   // Усиление контраста
-    const double brightness = 0;
-    
-    return ColorFilter.matrix([
-      contrast, 0, 0, 0, brightness * 255,
-      0, contrast, 0, 0, brightness * 255,
-      0, 0, contrast, 0, brightness * 255,
-      0, 0, 0, 1, 0,
+  ColorFilter _darkTileFilter() {
+    return const ColorFilter.matrix([
+      -0.334, -0.333, -0.333, 0, 255, 
+      -0.334, -0.333, -0.333, 0, 255,
+      -0.334, -0.333, -0.333, 0, 255,
+      0,    0,    0,    1, 0,
     ]);
   }
 
@@ -196,10 +194,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final stopsAsync = ref.watch(stopsProvider);
     final myLoc = ref.watch(myLocationProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tileUrl = isDark
-      // ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const osmUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    final tiles = TileLayer(
+      urlTemplate: osmUrl,
+      userAgentPackageName: 'com.ukolieva.maps.back_n_forth',
+      tileProvider: LoggingTileProvider(),
+    );
 
     return Scaffold(
       body: Stack(
@@ -209,16 +209,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             options: MapOptions(
               initialCenter: const LatLng(54.9885, 73.3242),
               initialZoom: 12,
-              // Добавляем onTap для выбора точек
               onTap: (tapPosition, point) {
                 if (_startPoint == null) {
                   setState(() => _startPoint = point);
                 } else if (_endPoint == null) {
                   setState(() => _endPoint = point);
-                  // Если обе точки есть — строим маршрут
                   _buildRoute(_startPoint!, _endPoint!);
                 } else {
-                  // Если маршрут уже есть, сбрасываем и начинаем заново
                   setState(() {
                     _startPoint = point;
                     _endPoint = null;
@@ -233,45 +230,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             children: [
               if (isDark)
                 ColorFiltered(
-                  // colorFilter: ColorFilter.mode(
-                  //   Colors.white.withOpacity(1), // Регулируйте прозрачность: 0.1–0.3
-                  //   BlendMode.overlay,
-                  // ),
-                  colorFilter: _getHighContrastFilter(),
-                  child: TileLayer(
-                    urlTemplate: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                    userAgentPackageName: 'com.yourname.transit',
-                    tileProvider: LoggingTileProvider(),//это нужно только для логирования???
-                  ),
+                  colorFilter: _darkTileFilter(),
+                  child: tiles,
                 )
               else
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.yourname.transit',
-                  tileProvider: LoggingTileProvider(),//это нужно только для логирования???
-                ),
-              stopsAsync.when(
-                data: (stops) => MarkerLayer(
-                  markers: stops.map((s) => Marker(
-                    point: LatLng(s.lat, s.lon),
-                    child: const Icon(Icons.circle, size: 8, color: Colors.blue),
-                  )).toList(),
-                ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Ошибка: $e')),
-              ),
-              //линия маршрута
-              if (_routeCoordinates != null && _routeCoordinates!.isNotEmpty)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: _routeCoordinates!,
-                    color: Colors.blueAccent,
-                    strokeWidth: 5.0,
+                tiles,
+              if (_showStops)
+                stopsAsync.when(
+                  data: (stops) => MarkerLayer(
+                    markers: stops
+                        .map((s) => Marker(
+                              point: LatLng(s.lat, s.lon),
+                              child: const Icon(Icons.circle, size: 8, color: Colors.blue),
+                            ))
+                        .toList(),
                   ),
-                ],
-              ),
-              // Маркеры точек старта и финиша
+                  loading: () => const SizedBox.shrink(),
+                  error: (e, _) => const SizedBox.shrink(),
+                ),
+              if (_routeCoordinates != null && _routeCoordinates!.isNotEmpty)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _routeCoordinates!,
+                      color: Colors.blueAccent,
+                      strokeWidth: 5.0,
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
                   if (_startPoint != null)
@@ -317,158 +303,118 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           Positioned(
             top: 16,
             left: 16,
-            right: 16,
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey[800] : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Поле ввода
-                  TextField(
-                    controller: _searchController,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.grey[800],
-                      fontSize: 16,
+            right: 72,
+            child: Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: _searchController,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (value) => _searchStops(value),
+                      decoration: InputDecoration(
+                        hintText: 'Например: Центр, Рынок, Ленина...',
+                        hintStyle: TextStyle(color: Theme.of(context).hintColor),
+                        prefixIcon: Icon(Icons.search, color: Theme.of(context).iconTheme.color),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.clear, color: Theme.of(context).iconTheme.color),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _filteredStops = []);
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Theme.of(context).cardColor,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      onChanged: (value) => _searchStops(value),
                     ),
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (value) => _searchStops(value),
-                    decoration: InputDecoration(
-                      hintText: 'Например: Центр, Рынок, Ленина...',
-                      hintStyle: TextStyle(
-                        color: isDark ? Colors.grey[500] : Colors.grey[400],
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      ),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(
-                                Icons.clear,
-                                color: isDark ? Colors.grey[500] : Colors.grey[600],
-                              ),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _filteredStops = []);
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
-                      ),
-                      filled: false,
-                    ),
-                    onChanged: (value) => _searchStops(value),
-                  ),
-                  
-                  // Индикатор загрузки
-                  if (_isSearching)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
+                    if (_isSearching)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                    ),
-                ],
+                    if (_filteredStops.isNotEmpty)
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 250),
+                        margin: const EdgeInsets.only(top: 8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _filteredStops.length > 7 ? 7 : _filteredStops.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1, thickness: 0.5),
+                          itemBuilder: (context, index) {
+                            final stop = _filteredStops[index];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              leading: CircleAvatar(
+                                radius: 10,
+                                backgroundColor: Colors.blue,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                                ),
+                              ),
+                              title: Text(
+                                stop.name,
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${stop.lat.toStringAsFixed(4)}, ${stop.lon.toStringAsFixed(4)}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                              ),
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                              onTap: () {
+                                _mapController.move(
+                                  LatLng(stop.lat, stop.lon),
+                                  17, // Ближе зум при выборе
+                                );
+                                _searchController.clear();
+                                FocusScope.of(context).unfocus(); // Скрыть клавиатуру
+                                setState(() => _filteredStops = []);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-
-          // Результаты поиска (отдельно от инпута)
-          if (_filteredStops.isNotEmpty)
-            Positioned(
-              top: 80,
-              left: 16,
-              right: 16,
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 300),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[800] : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+          // Toggle bus stops
+          Positioned(
+            top: 16,
+            right: 16,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context).cardColor,
+              child: IconButton(
+                icon: Icon(
+                  _showStops ? Icons.circle : Icons.circle_outlined,
+                  color: _showStops
+                      ? Colors.blue
+                      : (isDark ? Colors.grey[600] : Colors.grey[400]),
                 ),
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
-                  itemCount: _filteredStops.length > 5 ? 5 : _filteredStops.length,
-                  separatorBuilder: (_, __) => Divider(
-                    height: 1,
-                    color: isDark ? Colors.grey[800] : Colors.grey[200],
-                  ),
-                  itemBuilder: (context, index) {
-                    final stop = _filteredStops[index];
-                    return ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      leading: CircleAvatar(
-                        radius: 14,
-                        backgroundColor: Colors.blue,
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        stop.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? Colors.white : Colors.grey[900],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '${stop.lat.toStringAsFixed(4)}, ${stop.lon.toStringAsFixed(4)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.grey[500] : Colors.grey[600],
-                        ),
-                      ),
-                      trailing: Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
-                        color: isDark ? Colors.grey[600] : Colors.grey[400],
-                      ),
-                      onTap: () {
-                        _mapController.move(
-                          LatLng(stop.lat, stop.lon),
-                          17,
-                        );
-                        _searchController.clear();
-                        FocusScope.of(context).unfocus();
-                        setState(() => _filteredStops = []);
-                      },
-                    );
-                  },
-                ),
+                onPressed: () => setState(() => _showStops = !_showStops),
+                tooltip: _showStops ? 'Скрыть остановки' : 'Показать остановки',
               ),
             ),
+          ),
           if (_isOffline)
           Container(
             color: Colors.grey[850],
