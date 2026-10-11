@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../providers/transit_provider.dart';
+import '../providers/city_provider.dart';
+import '../widgets/city_picker_sheet.dart';
 import '../../core/network/network_resilience.dart';
 import '../../core/network/logging_tile_provider.dart';
 import '../../core/utils/logger.dart';
@@ -40,6 +42,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     super.initState();
     _mapController = MapController();
     _initLocation();
+    ref.read(downloadedCitiesProvider.future).then((cities) {
+      if (cities.isEmpty && mounted) showCityPicker(context);
+    });
   }
 
   @override
@@ -118,8 +123,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() => _isSearching = true);
 
     try {
-      // Всегда загружаем свежие данные из БД
-      final allStops = await ref.read(repositoryProvider).getStops();
+      final activeCity = ref.read(activeCityProvider);
+      
+      if (activeCity == null) {
+        AppLogger.w('Город не выбран, поиск невозможен');
+        setState(() => _isSearching = false);
+        return;
+      }
+      
+      final allStops = await ref.read(repositoryProvider).getStopsByCity(activeCity.slug);
       
       // Фильтруем с учётом кириллицы (регистронезависимо)
       final normalizedQuery = query.toLowerCase().trim();
@@ -191,7 +203,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final stopsAsync = ref.watch(stopsProvider);
+    final activeCity = ref.watch(activeCityProvider);
+    final AsyncValue<List<Stop>> stopsAsync = activeCity == null
+      ? const AsyncValue.data([])
+      : ref.watch(stopsByCityProvider(activeCity.slug));
+    if (activeCity != null) {
+      ref.listen(stopsByCityProvider(activeCity.slug), (_, next) {
+        final stops = next.valueOrNull ?? [];
+        if (stops.isEmpty || !_mapReady) return;
+        _mapController.fitCamera(CameraFit.coordinates(
+          coordinates: stops.map((s) => LatLng(s.lat, s.lon)).toList(),
+          padding: const EdgeInsets.all(32),
+        ));
+      });
+    }
     final myLoc = ref.watch(myLocationProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const osmUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -202,6 +227,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
 
     return Scaffold(
+      drawer: Drawer(
+        child: SafeArea(
+          child: ListTile(
+            leading: const Icon(Icons.location_city, color: Colors.blue),
+            title: Text(activeCity?.name ?? 'Выберите город'),
+            subtitle: const Text('Город'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.pop(context);
+              showCityPicker(context);
+            },
+          ),
+        ),
+      ),
       body: Stack(
         children: [
           FlutterMap(
@@ -239,7 +278,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 stopsAsync.when(
                   data: (stops) => MarkerLayer(
                     markers: stops
-                        .map((s) => Marker(
+                        .map<Marker>((s) => Marker(
                               point: LatLng(s.lat, s.lon),
                               child: const Icon(Icons.circle, size: 8, color: Colors.blue),
                             ))
@@ -299,10 +338,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             const Positioned.fill(
               child: Center(child: CircularProgressIndicator()),
             ),
+          Positioned(
+            top: 34,
+            left: 16,
+            child: Builder(
+              builder: (context) => Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                color: Theme.of(context).cardColor,
+                child: IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
+            ),
+          ),
           // Панель поиска
           Positioned(
-            top: 16,
-            left: 16,
+            top: 34,
+            left: 72,
             right: 72,
             child: Card(
               elevation: 4,
@@ -397,7 +451,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
           // Toggle bus stops
           Positioned(
-            top: 16,
+            top: 34,
             right: 16,
             child: Material(
               elevation: 4,

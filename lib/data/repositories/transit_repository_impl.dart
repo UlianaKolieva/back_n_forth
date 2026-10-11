@@ -3,9 +3,10 @@ import '../../domain/repositories/transit_repository.dart';
 import '../datasources/local_db_datasource.dart';
 
 class TransitRepositoryImpl implements TransitRepository {
-  final LocalDbDatasource _localDb;
-  TransitRepositoryImpl(this._localDb);
+  final LocalDbDatasource _dataSource;
+  TransitRepositoryImpl(this._dataSource);
 
   @override
-  Future<List<Stop>> getStops() => _localDb.getStops();
+  Future<List<Stop>> getStopsByCity(String citySlug) =>
+      _dataSource.getStopsByCity(citySlug);
 }

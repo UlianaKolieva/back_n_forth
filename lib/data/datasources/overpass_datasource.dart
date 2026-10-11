@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../../domain/entities/stop.dart';
 import '../../domain/entities/transit_route.dart';
 import 'transit_data_source.dart';
@@ -9,6 +9,29 @@ class OverpassDataSource implements TransitDataSource {
   final String jsonData;
 
   OverpassDataSource({required this.jsonData});
+
+  static Future<OverpassDataSource> fetchCity(String cityName) async {
+    // Границы городов в OSM называются "городской округ Омск" и т.п.,
+    // поэтому ищем узел place и берём его админ. границу, оканчивающуюся на имя города
+    final name = cityName.replaceAll('"', r'\"');
+    final query = '''
+[out:json][timeout:120];
+node["place"~"^(city|town)\$"]["name"="$name"];
+is_in->.a;
+area.a["boundary"="administrative"]["admin_level"~"^(4|5|6|8)\$"]["name"~"(^|[ «])$name»?\$"]->.city;
+node["highway"="bus_stop"](area.city);
+out;
+''';
+    final res = await http
+        .post(
+          Uri.parse('https://overpass-api.de/api/interpreter'),
+          headers: {'User-Agent': 'back_n_forth/1.0 (com.ukolieva.maps.back_n_forth)'},
+          body: {'data': query},
+        )
+        .timeout(const Duration(seconds: 150));
+    if (res.statusCode != 200) throw Exception('Overpass ${res.statusCode}');
+    return OverpassDataSource(jsonData: utf8.decode(res.bodyBytes));
+  }
 
   @override
   Future<List<Stop>> getStops() async {
